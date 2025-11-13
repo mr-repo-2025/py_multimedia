@@ -58,13 +58,13 @@ def get_current_period():
     return period_start, period_end
 
 
-def save_history_if_due():
-    """Guarda histórico automáticamente cada quincena (dos veces al mes)."""
+async def save_history_if_due(context: ContextTypes.DEFAULT_TYPE = None):
+    """Guarda el histórico cada dos semanas e intenta registrar los nombres."""
     today = datetime.date.today()
     history = load_history()
 
     if not POINTS:
-        return  # No hay puntos aún
+        return
 
     period_start, period_end = get_current_period()
 
@@ -73,12 +73,20 @@ def save_history_if_due():
         if h["period_start"] == str(period_start) and h["period_end"] == str(period_end):
             return
 
-    # Crear lista de ranking actual
     ranking_list = []
     for user_id, points in POINTS.items():
+        name = str(user_id)
+        # Si tenemos acceso al bot, intentamos resolver el nombre real
+        if context:
+            try:
+                user = await context.bot.get_chat(user_id)
+                name = user.full_name
+            except Exception:
+                pass
+
         ranking_list.append({
             "user_id": user_id,
-            "name": str(user_id),  # Nombre se resolverá al mostrar
+            "name": name,
             "points": points
         })
 
@@ -86,12 +94,12 @@ def save_history_if_due():
         history.append({
             "period_start": str(period_start),
             "period_end": str(period_end),
+            "saved_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "ranking": ranking_list
         })
         save_history(history)
         logging.info(f"Histórico guardado para {period_start} - {period_end}")
 
-        # Reiniciar puntos después de guardar
         POINTS.clear()
         save_data()
 
@@ -120,7 +128,7 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     # Intentar guardar histórico si toca
-    save_history_if_due()
+    await save_history_if_due(context)
 
 
 async def ranking(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -145,7 +153,7 @@ async def ranking(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Muestra el histórico quincenal."""
+    """Muestra el histórico quincenal con nombres reales."""
     history = load_history()
 
     if not history:
@@ -155,7 +163,10 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = "📅 *Histórico de quincenas*\n\n"
 
     for period in history:
-        text += f"🗓 {period['period_start']} → {period['period_end']}\n"
+        text += (
+            f"🗓 {period['period_start']} → {period['period_end']}\n"
+            f"💾 Guardado el: {period.get('saved_at', 'N/A')}\n"
+        )
         ranking = period.get("ranking", [])
 
         if not ranking:
@@ -163,6 +174,7 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
             continue
 
         ranking = sorted(ranking, key=lambda x: x["points"], reverse=True)
+
         for i, user in enumerate(ranking, start=1):
             name = user.get("name", f"Usuario {user['user_id']}")
             text += f"  {i}. {name} — {user['points']} pts\n"
@@ -174,10 +186,11 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 Hola! Soy el bot monitor.\n"
-        "Envía una foto para ganar puntos 📸\n"
-        "Usa /ranking para ver el top actual 🏆\n"
-        "Usa /history para ver los históricos quincenales 📅"
+        "📸 Envía una foto para ganar puntos.\n"
+        "🏆 Usa /ranking para ver el top actual.\n"
+        "📅 Usa /history para ver los históricos quincenales."
     )
+
 
 # --- Inicio del bot ---
 def main():
@@ -188,6 +201,7 @@ def main():
     app.add_handler(CommandHandler("history", history))
     app.add_handler(MessageHandler(filters.PHOTO, on_photo))
     app.run_polling()
+
 
 if __name__ == "__main__":
     main()
