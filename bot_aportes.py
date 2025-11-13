@@ -9,7 +9,7 @@ DATA_FILE = Path("ranking.json")
 POINTS = defaultdict(int)
 logging.basicConfig(level=logging.INFO)
 
-BOT_TOKEN = "AQUÍ_TU_TOKEN_DEL_BOT"
+BOT_TOKEN = "8501657323:AAGP-qG3fqPMobffqlP9PsZgVx9zhZvc3N8"
 
 def load_data():
     if DATA_FILE.exists():
